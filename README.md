@@ -4,6 +4,82 @@ A modern, modular SaaS dashboard and REST API backend for an **Autonomous Resear
 
 ---
 
+## Quick Start
+
+Run the whole stack in about five minutes. You will need **two terminals** —
+the backend and frontend are both long-running processes, so one terminal cannot
+serve both.
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| **Node.js 18 or newer** | Required by Vite (`^18 \|\| >=20`). Check with `node -v`. |
+| **npm** | Ships with Node. |
+| **A MongoDB database** | Required — the server exits immediately without it. A free cloud cluster is the easiest option (below). |
+| API keys | **Optional.** Without them the agent still runs end to end using keyless search and its offline brain — it just produces a less rich report. |
+
+### Step 1 — Get a MongoDB connection string
+
+1. Create a free cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) (no card required).
+2. **Database Access** → add a user, and note the username and password.
+3. **Network Access** → *Add Current IP Address* (Atlas blocks unknown IPs by default).
+4. **Connect → Drivers** → copy the connection string. It looks like:
+
+```
+mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+```
+
+Prefer to run locally? `mongodb://localhost:27017/ragnarok` works with a local `mongod`.
+
+### Step 2 — Backend (terminal 1)
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+```
+
+Open `backend/.env` and set `MONGO_URI` to the string from Step 1. Everything else
+can stay blank to start. Then:
+
+```bash
+npm start          # http://localhost:5000
+```
+
+### Step 3 — Frontend (terminal 2)
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
+
+### Step 4 — Confirm it is working
+
+Open **http://localhost:5173**. You should see the dashboard, and the backend
+terminal should log:
+
+```
+MongoDB connected: ...
+Server running on port 5000 [development]
+```
+
+Type a research question and press start. The activity timeline fills in live as
+the agent plans, searches, evaluates evidence, and writes a report.
+
+> **Seeing mock data?** The frontend silently falls back to its built-in mock
+> simulation whenever `GET /health` fails. That is deliberate — the UI still
+> demos without a backend — but it means a port mismatch looks like a working
+> app showing fake results. Both sides default to **5000**; if you change one,
+> change the other. The backend log is the source of truth.
+
+> **Optional keys.** Add a free `GEMINI_API_KEY` ([aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+> and `TAVILY_API_KEY` ([app.tavily.com](https://app.tavily.com/)) to `.env` for
+> live LLM reasoning and better search. Without them the run still completes.
+
+---
+
 ## Architecture Overview
 
 ```
