@@ -99,7 +99,7 @@ autonomous-research-agent/
 │   │   │   ├── llm/               # Provider chain: gemini → openai → deterministic mock
 │   │   │   ├── tools/             # Search chain: tavily → duckduckgo → wikipedia
 │   │   │   ├── pipeline/          # planner, researcher, reflector, synthesizer, verifier
-│   │   │   └── lib/               # Citation injection, rate limiter, trace log, source typing
+│   │   │   └── lib/               # Citation injection, conflict de-duplication, rate limiter, trace log, source typing
 │   │   └── utils/            # Operational ApiError class
 │   └── __tests__/            # Jest + Supertest suites (52 agent tests, offline)
 │
