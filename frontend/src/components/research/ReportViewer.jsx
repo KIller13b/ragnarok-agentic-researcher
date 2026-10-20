@@ -26,7 +26,14 @@ export default function ReportViewer() {
 
   const handleCopy = () => {
     if (!report) return;
-    const text = `
+
+    // Prefer the agent's own Markdown: it is the complete, citation-audited
+    // document (findings, [n] citations, references, limitations). The
+    // hand-rolled fallback below would silently drop all of that.
+    const text =
+      report.markdown && report.markdown.trim().length > 0
+        ? report.markdown.trim()
+        : `
 # ${report.title || 'Research Report'}
 Generated: ${report.generatedAt || 'N/A'}
 Confidence: ${Math.round((report.confidenceScore || 0.9) * 100)}%

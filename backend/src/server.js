@@ -3,7 +3,11 @@ require('dotenv').config();
 const app = require('./app');
 const connectDB = require('./config/db');
 
-const PORT = process.env.PORT || 3000;
+// Default matches the documented port in README.md and the frontend's
+// API_BASE fallback (frontend/src/services/api.js -> http://localhost:5000).
+// A mismatch here makes the UI's /health check fail silently, which drops it
+// onto the mock data path and looks like a working demo with fake reports.
+const PORT = process.env.PORT || 5000;
 
 const start = async () => {
   // Validate critical configuration
