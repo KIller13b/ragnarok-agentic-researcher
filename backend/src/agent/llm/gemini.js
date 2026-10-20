@@ -1,9 +1,15 @@
 /**
  * Google Gemini REST client (no SDK dependency).
  *
- * Chosen for the free tier: no billing account, ~15 req/min and ~1,500 req/day
- * on gemini-2.0-flash, plus native JSON responses. We talk to the REST API
- * directly with global fetch so the backend has zero extra dependencies.
+ * Chosen for the free tier: no billing account required, plus native JSON
+ * responses. We talk to the REST API directly with global fetch so the backend
+ * has zero extra dependencies.
+ *
+ * NOTE on free-tier limits: they vary per model and are easy to misread. The
+ * current default (gemini-3.1-flash-lite) has a usable quota, whereas
+ * gemini-3-flash-preview is capped at 20 requests/day — a full agent run can
+ * exhaust that in one go. Never assume a per-minute limit without checking the
+ * 429 body, which reports the real limit and retry delay.
  */
 
 const config = require('../config');

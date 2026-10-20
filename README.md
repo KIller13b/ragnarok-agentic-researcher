@@ -157,11 +157,11 @@ npm start
 | `MONGO_URI` | **Yes** | MongoDB connection string (e.g. MongoDB Atlas). Server hard-exits without it. |
 | `LLM_PROVIDER` | No | `auto` (default) \| `gemini` \| `openai` \| `mock` |
 | `GEMINI_API_KEY` | No | Google Gemini key — primary LLM ([aistudio.google.com/apikey](https://aistudio.google.com/apikey), free tier) |
-| `GEMINI_MODEL` | No | Default `gemini-3-flash-preview`. **`gemini-2.0-flash` and `gemini-2.5-flash` are retired (404).** |
+| `GEMINI_MODEL` | No | Default `gemini-3.1-flash-lite` (verified working). **`gemini-2.0-flash`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` and `gemini-3-pro-preview` are retired (404).** |
 | `OPENAI_API_KEY` | No | Fallback LLM. Model `gpt-4o-mini`. |
 | `TAVILY_API_KEY` | No | Primary search ([app.tavily.com](https://app.tavily.com/), free tier). Without it the agent uses keyless DuckDuckGo → Wikipedia. |
 | `AGENT_ENABLED` | No | `true` (default) starts the agent on session create; `false` creates idle sessions |
-| `AGENT_LLM_MIN_INTERVAL_MS` | No | LLM pacing (default `400`). Raise to `~13000` to stay inside Gemini's free-tier limit. |
+| `AGENT_LLM_MIN_INTERVAL_MS` | No | LLM pacing (default `400`). Only throttle this if you are hitting *per-minute* limits — it cannot help against the daily cap described in §5. |
 | `AGENT_DDG_MIN_INTERVAL_MS` | No | DuckDuckGo pacing (default `1500`) — it throttles hard below this |
 | `AGENT_MAX_ITERATIONS` | No | Hard loop bound (default `3`) |
 | `AGENT_MAX_TASKS` | No | Hard subtask bound (default `8`) |
@@ -245,12 +245,20 @@ its deps are unavailable.
   local mock simulation, so the UI still demos without a backend. **Note:** the
   backend defaults to port `5000` to match this client — if you change one, change
   both, or the fallback will trigger silently and you will be looking at mock data.
-- **Free-tier quota is the practical ceiling.** Gemini's free tier allows roughly
-  5 requests/minute while a full run makes ~15–20 calls, so a default-tempo run
-  hits HTTP 429 partway through and the remaining calls degrade to the
-  deterministic mock. Raise `AGENT_LLM_MIN_INTERVAL_MS` (~13000) for a fully
-  LLM-authored report. `gemini-2.0-flash` and `gemini-2.5-flash` are **retired**;
-  `gemini-3-flash-preview` is the verified working default.
+- **Free-tier quota is the practical ceiling — and it is a *daily* cap, not a
+  per-minute one.** `gemini-3-flash-preview` allows **20 requests per day**; a full
+  run needs ~15–20 calls, so a single run can consume the entire daily allowance and
+  then 429 for the next ~24h. Throttling with `AGENT_LLM_MIN_INTERVAL_MS` does not
+  help against a daily cap. `gemini-3.1-flash-lite` has its own separate quota,
+  works with JSON mode, and is the recommended default. When any provider 429s, the
+  agent degrades the remaining calls to the deterministic mock and states so in the
+  report's `## Limitations` — a run that says *"Generated in deterministic offline
+  mode"* had a live search but a fallback brain; a clean run reports `verified`.
+- **Retired models (verified 2026-10-20, all 404).** `gemini-2.0-flash`,
+  `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3-pro-preview`.
+  **Working:** `gemini-3.1-flash-lite`, `gemini-flash-latest`,
+  `gemini-3.1-flash-lite-preview`, and `gemini-3-flash-preview` (subject to the
+  20/day cap above).
 - **Python `research/` package: standalone.** 95 tests passing; intentionally not
   on any runtime path (see §4).
 - **No vector search / embeddings pipeline** is in place — retrieval is live web

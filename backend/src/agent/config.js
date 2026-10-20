@@ -27,7 +27,11 @@ const config = {
   // 'auto' picks gemini → openai → mock depending on which keys exist.
   llmProvider: (process.env.LLM_PROVIDER || 'auto').toLowerCase(),
   geminiApiKey: process.env.GEMINI_API_KEY || '',
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+  // Default must be a model that still EXISTS. gemini-2.0-flash / 2.5-flash /
+  // 2.5-flash-lite / 3-pro-preview are retired (404 as of 2026-10-20).
+  // gemini-3.1-flash-lite is verified working and has its own free-tier quota,
+  // unlike gemini-3-flash-preview which is capped at 20 requests/day.
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
