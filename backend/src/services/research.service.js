@@ -87,7 +87,7 @@ const deleteResearch = async (id) => {
 
     await session.commitTransaction();
   } catch (txErr) {
-    await session.abortTransaction();
+    await session.abortTransaction().catch(() => {});
 
     // Standalone MongoDB doesn't support transactions — fall back
     if (

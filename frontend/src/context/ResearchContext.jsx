@@ -42,8 +42,18 @@ export function ResearchProvider({ children }) {
     setSelectedResearchId(id);
   };
 
+  const activeTimersRef = useRef({});
+
+  const clearTimers = (id) => {
+    if (activeTimersRef.current[id]) {
+      activeTimersRef.current[id].forEach(clearTimeout);
+      delete activeTimersRef.current[id];
+    }
+  };
+
   // Stop / cancel a research session
   const stopResearch = (id) => {
+    clearTimers(id);
     setResearches((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -64,6 +74,7 @@ export function ResearchProvider({ children }) {
 
   // Helper to complete a research session with mock report
   const completeResearch = (id) => {
+    clearTimers(id);
     setResearches((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -208,7 +219,7 @@ export function ResearchProvider({ children }) {
 
     // Simulate lifecycle progress with timers
     // Step 1 -> Step 2 after 3s
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       setResearches((prev) =>
         prev.map((item) => {
           if (item.id === newId && item.status === 'in_progress') {
@@ -231,7 +242,7 @@ export function ResearchProvider({ children }) {
     }, 3000);
 
     // Step 2 -> Step 3 after 7s
-    setTimeout(() => {
+    const t2 = setTimeout(() => {
       setResearches((prev) =>
         prev.map((item) => {
           if (item.id === newId && item.status === 'in_progress') {
@@ -255,7 +266,7 @@ export function ResearchProvider({ children }) {
     }, 7000);
 
     // Step 3 -> Step 4 after 12s
-    setTimeout(() => {
+    const t3 = setTimeout(() => {
       setResearches((prev) =>
         prev.map((item) => {
           if (item.id === newId && item.status === 'in_progress') {
@@ -279,7 +290,7 @@ export function ResearchProvider({ children }) {
     }, 12000);
 
     // Completion after 16s
-    setTimeout(() => {
+    const t4 = setTimeout(() => {
       setResearches((prev) =>
         prev.map((item) => {
           if (item.id === newId && item.status === 'in_progress') {
@@ -338,10 +349,13 @@ export function ResearchProvider({ children }) {
       );
     }, 16000);
 
+    activeTimersRef.current[newId] = [t1, t2, t3, t4];
+
     return newId;
   };
 
   const resetMockData = () => {
+    Object.keys(activeTimersRef.current).forEach(clearTimers);
     setResearches(INITIAL_RESEARCHES);
     setSelectedResearchId('673f2a1e4c9d');
     localStorage.removeItem('research_agent_sessions');
