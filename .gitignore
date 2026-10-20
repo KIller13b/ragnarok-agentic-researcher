@@ -43,3 +43,26 @@ coverage/
 # Vite cache
 .vite/
 */.vite/
+
+# ── Python (research module) ──────────────────────────────────────────────────
+# Virtual environments
+venv/
+.venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+# Pytest / test caches
+.pytest_cache/
+**/.pytest_cache/
+.cache/
+
+# Demo output (generated at runtime — not source code)
+demo_output/
+
+# Python package build artifacts
+*.egg-info/
+dist/
+build/
