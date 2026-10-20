@@ -1,0 +1,12 @@
+# ── Research & Evidence module dependencies ──────────────────────────────────
+# Tavily: web search API with a free tier (1 000 credits/month, no credit card)
+tavily-python==0.5.0
+
+# python-dotenv: loads .env files into os.environ so secrets stay out of code
+python-dotenv==1.0.1
+
+# pytest: test runner (friendlier output than built-in unittest)
+pytest==8.3.5
+
+# pytest-mock: convenient mock/patch fixtures for pytest
+pytest-mock==3.14.0
