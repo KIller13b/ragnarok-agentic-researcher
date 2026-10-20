@@ -25,7 +25,7 @@ autonomous-research-agent/
 │   │   │   ├── pipeline/          # planner, researcher, reflector, synthesizer, verifier
 │   │   │   └── lib/               # Citation injection, rate limiter, trace log, source typing
 │   │   └── utils/            # Operational ApiError class
-│   └── __tests__/            # Jest + Supertest suites (45 agent tests, offline)
+│   └── __tests__/            # Jest + Supertest suites (52 agent tests, offline)
 │
 ├── frontend/                 # React 18 + Vite + Tailwind CSS Dashboard
 │   ├── src/
@@ -138,7 +138,7 @@ cp .env.example .env
 # Without keys the agent still runs end-to-end on DuckDuckGo/Wikipedia and the
 # deterministic mock brain — it just produces a less rich report.
 
-# Run automated tests (45 agent tests, fully offline)
+# Run automated tests (52 agent tests, fully offline)
 npm test
 
 # Run development server with Nodemon (http://localhost:5000)
@@ -238,7 +238,7 @@ its deps are unavailable.
 
 - **Agent brain: implemented and verified.** The backend runs the full autonomous
   loop against live providers (Gemini + Tavily) and produces citation-audited
-  Markdown reports. `npm test` covers it with 45 offline tests.
+  Markdown reports. `npm test` covers it with 52 offline tests.
 - **Frontend: live-wired with mock fallback.** `frontend/src/services/api.js` calls
   the real API, polls `GET /research/:id/activity` every 1.5s, and renders live
   tasks/evidence/tool calls/report. If `GET /health` fails it falls back to the
@@ -263,3 +263,13 @@ its deps are unavailable.
   on any runtime path (see §4).
 - **No vector search / embeddings pipeline** is in place — retrieval is live web
   search plus Wikipedia corroboration.
+- **Groundedness is verified; topical relevance is not.** The agent checks that
+  every claim is *supported by its source* and cited — it does **not** yet score
+  whether a source actually *answers the question*. Search matching is lexical, so
+  an off-topic page that happens to share keywords can pass extraction and appear
+  as evidence (e.g. a US shop address surfacing for a query about prices in
+  rupees). Such a source is normally irrelevant rather than false, and in practice
+  the large majority of sources are on-topic. A question-vs-source relevance gate
+  with a tuned threshold is the natural next step; it is left out deliberately
+  rather than guessed at, since an over-aggressive filter discards good sources —
+  which is worse than the problem it solves.
