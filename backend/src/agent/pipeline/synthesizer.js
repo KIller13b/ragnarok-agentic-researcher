@@ -19,6 +19,7 @@ const Report = require('../../models/report.model');
 const config = require('../config');
 const llm = require('../llm/client');
 const { injectCitations, buildMarkdown } = require('../lib/citations');
+const { dedupeConflicts, conflictKey } = require('../lib/conflicts');
 
 const SYNTHESIS_SYSTEM = `You are the synthesis module of an autonomous research agent.
 Write the findings of a research report using ONLY the supplied evidence.
@@ -167,31 +168,32 @@ ${citable
     ];
   }
 
-  let reportConflicts = (Array.isArray(data?.conflicts) ? data.conflicts : [])
-    .filter((conflict) => conflict && conflict.claim)
-    .slice(0, 10)
-    .map((conflict) => ({
-      claim: String(conflict.claim).slice(0, 300),
-      description: String(conflict.description || '').slice(0, 800),
-      evidenceIds: (Array.isArray(conflict.evidenceIndexes) ? conflict.evidenceIndexes : [])
-        .map((index) => citable[Number(index) - 1]?._id)
-        .filter(Boolean),
-    }));
+  // Deduplicate within the synthesis output first: the model often reports the
+  // same contradiction twice in different words (see lib/conflicts.js).
+  let reportConflicts = dedupeConflicts(
+    (Array.isArray(data?.conflicts) ? data.conflicts : [])
+      .filter((conflict) => conflict && conflict.claim)
+      .map((conflict) => ({
+        claim: String(conflict.claim).slice(0, 300),
+        description: String(conflict.description || '').slice(0, 800),
+        evidenceIds: (Array.isArray(conflict.evidenceIndexes) ? conflict.evidenceIndexes : [])
+          .map((index) => citable[Number(index) - 1]?._id)
+          .filter(Boolean),
+      }))
+  ).slice(0, 10);
 
   // Conflicts discovered during reflection are always reported, even if the
   // synthesis pass chose to omit them.
+  const reportConflictKeys = new Set(reportConflicts.map(conflictKey));
   conflicts.forEach((conflict) => {
     if (!conflict.claim) return;
-    const alreadyPresent = reportConflicts.some(
-      (existing) => existing.claim.toLowerCase().slice(0, 40) === String(conflict.claim).toLowerCase().slice(0, 40)
-    );
-    if (!alreadyPresent) {
-      reportConflicts.push({
-        claim: String(conflict.claim).slice(0, 300),
-        description: String(conflict.description || '').slice(0, 800),
-        evidenceIds: (conflict.evidenceIds || []).map(String),
-      });
-    }
+    if (reportConflictKeys.has(conflictKey(conflict))) return;
+    reportConflictKeys.add(conflictKey(conflict));
+    reportConflicts.push({
+      claim: String(conflict.claim).slice(0, 300),
+      description: String(conflict.description || '').slice(0, 800),
+      evidenceIds: (conflict.evidenceIds || []).map(String),
+    });
   });
 
   // Operational notes from the orchestrator (e.g. subtasks the budget cut

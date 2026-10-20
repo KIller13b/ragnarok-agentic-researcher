@@ -334,6 +334,64 @@ describe('Report cleanup helpers', () => {
   });
 });
 
+describe('Conflict de-duplication (regression: same conflict printed twice)', () => {
+  const { dedupeConflicts } = require('../src/agent/lib/conflicts');
+
+  // Taken verbatim from a live badminton report: one genuine disagreement,
+  // reported twice by the model with different wording. Text matching missed it.
+  const rewordedDuplicate = [
+    {
+      claim: 'Suitability of head-heavy racquets for beginners.',
+      evidenceIds: ['e4', 'e1'],
+    },
+    {
+      claim: 'Head-heavy racquets are not recommended for beginners.',
+      evidenceIds: ['e1', 'e4'],
+    },
+  ];
+
+  it('collapses the same conflict reworded, despite different claim text', () => {
+    const out = dedupeConflicts(rewordedDuplicate);
+    expect(out).toHaveLength(1);
+  });
+
+  it('is insensitive to evidence-id ordering', () => {
+    expect(dedupeConflicts([{ claim: 'a', evidenceIds: ['x', 'y'] }, { claim: 'b', evidenceIds: ['y', 'x'] }])).toHaveLength(1);
+  });
+
+  it('keeps genuinely different conflicts apart', () => {
+    const out = dedupeConflicts([
+      { claim: 'A conflicts with B', evidenceIds: ['e1', 'e2'] },
+      { claim: 'C conflicts with D', evidenceIds: ['e3', 'e4'] },
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('falls back to claim text when no evidence ids are present', () => {
+    // No ids to key on -> must not collapse two unrelated conflicts.
+    expect(
+      dedupeConflicts([
+        { claim: 'the price is higher than expected', evidenceIds: [] },
+        { claim: 'the latency is worse than advertised', evidenceIds: [] },
+      ])
+    ).toHaveLength(2);
+    // ...but identical text still collapses.
+    expect(
+      dedupeConflicts([
+        { claim: 'the price is higher than expected', evidenceIds: [] },
+        { claim: 'the price is higher than expected', evidenceIds: [] },
+      ])
+    ).toHaveLength(1);
+  });
+
+  it('preserves first-seen order and tolerates junk input', () => {
+    const out = dedupeConflicts([null, { claim: 'first', evidenceIds: ['e1'] }, { claim: 'dup', evidenceIds: ['e1'] }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].claim).toBe('first');
+    expect(dedupeConflicts(undefined)).toEqual([]);
+  });
+});
+
 describe('Model schema compatibility (regression: silently-stripped fields)', () => {
   // Mongoose drops unknown paths on save. Two real bugs of this kind were
   // caught by the E2E run: `citationIndexes` vanished from sections (so every

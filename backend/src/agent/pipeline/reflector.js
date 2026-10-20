@@ -15,6 +15,7 @@ const Task = require('../../models/task.model');
 const Evidence = require('../../models/evidence.model');
 const config = require('../config');
 const llm = require('../llm/client');
+const { dedupeConflicts } = require('../lib/conflicts');
 
 const SYSTEM = `You are the reflection module of an autonomous research agent.
 You receive the evidence collected so far, grouped by subtask, and you must
@@ -134,16 +135,20 @@ ${[...triedQueries].join(' ; ')}`,
     })
     .slice(0, config.maxTasks);
 
-  const conflicts = (Array.isArray(data?.conflicts) ? data.conflicts : [])
-    .filter((conflict) => conflict && conflict.claim)
-    .slice(0, 10)
-    .map((conflict) => ({
-      claim: String(conflict.claim).slice(0, 300),
-      description: String(conflict.description || '').slice(0, 800),
-      evidenceIds: (Array.isArray(conflict.evidenceIndexes) ? conflict.evidenceIndexes : [])
-        .map((index) => evidence[Number(index)]?._id)
-        .filter(Boolean),
-    }));
+  // Conflicts arrive one-per-observation, so the same underlying contradiction
+  // is often reported several times with different wording. Shared helper keys
+  // on the evidence involved, which is stable across rewordings.
+  const conflicts = dedupeConflicts(
+    (Array.isArray(data?.conflicts) ? data.conflicts : [])
+      .filter((conflict) => conflict && conflict.claim)
+      .map((conflict) => ({
+        claim: String(conflict.claim).slice(0, 300),
+        description: String(conflict.description || '').slice(0, 800),
+        evidenceIds: (Array.isArray(conflict.evidenceIndexes) ? conflict.evidenceIndexes : [])
+          .map((index) => evidence[Number(index)]?._id)
+          .filter(Boolean),
+      }))
+  ).slice(0, 10);
 
   const modelFollowups = (Array.isArray(data?.followupQueries) ? data.followupQueries : [])
     .filter((followup) => followup && followup.query)
