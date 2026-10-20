@@ -16,9 +16,16 @@ autonomous-research-agent/
 │   │   ├── models/           # Mongoose models (Research, Task, Evidence, ToolCall, Report)
 │   │   ├── routes/           # REST endpoints under /api/v1
 │   │   ├── schemas/          # Zod validation schemas
-│   │   ├── services/         # Cascade delete, transactions, agent placeholder
+│   │   ├── services/         # Cascade delete, transactions, agent launch hook
+│   │   ├── agent/            # ★ The Agent Brain — autonomous research loop
+│   │   │   ├── agent.service.js   # State machine: queued → planning → researching ⇄ evaluating → generating_report → completed|failed
+│   │   │   ├── config.js          # All loop bounds, rate limits and provider settings
+│   │   │   ├── llm/               # Provider chain: gemini → openai → deterministic mock
+│   │   │   ├── tools/             # Search chain: tavily → duckduckgo → wikipedia
+│   │   │   ├── pipeline/          # planner, researcher, reflector, synthesizer, verifier
+│   │   │   └── lib/               # Citation injection, rate limiter, trace log, source typing
 │   │   └── utils/            # Operational ApiError class
-│   └── __tests__/            # Jest + Supertest test suite (9 tests passing)
+│   └── __tests__/            # Jest + Supertest suites (45 agent tests, offline)
 │
 ├── frontend/                 # React 18 + Vite + Tailwind CSS Dashboard
 │   ├── src/
@@ -27,12 +34,30 @@ autonomous-research-agent/
 │   │   │   ├── research/     # ResearchForm, ActivityTimeline, TaskList, EvidenceList, ToolCallList, ReportViewer
 │   │   │   ├── dashboard/    # QuickStats, RecentResearches, ResearchDetails
 │   │   │   └── ui/           # Button, Card, Badge, EmptyState, ThemeToggle
-│   │   ├── context/          # ThemeContext (Light, Dark, System) & ResearchContext (Mock state & simulation)
+│   │   ├── context/          # ThemeContext (Light, Dark, System) & ResearchContext (live API + mock fallback)
 │   │   ├── data/             # Realistic mock research sessions & reports
+│   │   ├── services/         # api.js — the live backend client
 │   │   └── pages/            # Home, NewResearch, MyResearches, Reports, Settings
 │   └── dist/                 # Production build bundle
+│
+├── research/                 # ★ STANDALONE Python reference implementation
+│   ├── search.py             # Live web search via Tavily (or mock mode)
+│   ├── evidence.py           # Evidence collection, dedup, persistence
+│   ├── verification.py       # Citation checks, uncited-claim flagging, conflict heuristic
+│   ├── demo.py               # Runnable end-to-end demonstration
+│   └── tests/                # pytest suites (95 tests passing)
+│
+├── requirements.txt          # Python deps for the `research/` package only
 └── README.md
 ```
+
+> **Note on the two `research/` directories** — they are unrelated, and the name
+> collision is worth knowing about up front:
+> - `frontend/src/components/research/` — React components for the dashboard.
+> - `research/` (repo root) — a standalone **Python** package (Role 2: Research &
+>   Evidence). It is *not* imported by the backend and is *not* on any runtime
+>   path. See [§4](#4-the-research-package-standalone-reference-implementation)
+>   for why it is kept separate.
 
 ---
 
@@ -41,12 +66,13 @@ autonomous-research-agent/
 ### Key Features
 - **Design Reference Match**: Faithfully recreates the layout, dark navy vertical sidebar (`#0A1128`), and two-column SaaS workspace.
 - **Dark & Light Themes**: Full theme support (Light `#F5F8FC`, Dark `#0B1120`, System default). Persisted in `localStorage` with zero flicker on initial load.
+- **Live backend integration**: `src/services/api.js` drives real sessions — health check, create, and a 1.5s poll of `GET /research/:id/activity` until the run finishes. Falls back to the local mock simulation when the API is unreachable, so the UI still demos standalone.
 - **Card 1 — Start a New Research**: Multi-line question textarea with pre-filled collegiate hackathon query, optional deadline picker, budget input, preferred source dropdown, and validation.
 - **Card 2 — Current Research Activity**:
   - Visual status badge (`In Progress`, `Completed`, `Failed`).
   - Interactive tabs: **Agent Activity**, **Tasks**, **Evidence**, **Tool Calls**, and **Report**.
-  - Vertical 4-step workflow timeline: Planning Research → Searching Sources → Evaluating Evidence → Generating Report.
-  - Interactive controls: `Finish Mock` (fast-forwards simulation) and `Stop` (cancels session).
+  - Vertical 4-step workflow timeline driven by the agent's real phase transitions: Planning Research → Searching Sources → Evaluating Evidence → Generating Report.
+  - Interactive controls: `Finish Mock` (fast-forwards the *offline fallback* only) and `Stop` (cancels session).
 - **Card 3 — Research Results**:
   - Centered empty state illustration when report is pending.
   - Full report view upon completion: Executive summary, feature comparison matrix table, detailed findings, conflicting claims callout, research limitations, and final recommendation with confidence rating.
@@ -86,6 +112,11 @@ npm run preview
 ### Key Features
 - Express API with CommonJS modular architecture.
 - Mongoose models for `Research`, `Task`, `Evidence`, `ToolCall`, and `Report` with indexes and timestamps.
+- **Autonomous agent brain** (`src/agent/`) driving the full loop: decompose → search → extract → reflect → synthesise → verify.
+- **Self-directed re-planning**: audits collected evidence for gaps and contradictions, then spawns its own follow-up searches instead of stopping at the first answer.
+- **Engineered graceful degradation**: Gemini → OpenAI → deterministic offline mock for the LLM, and Tavily → DuckDuckGo → Wikipedia for search, so free-tier quotas, missing keys and flaky Wi-Fi never crash a run.
+- **Hard loop bounds**: max iterations, max tasks, max LLM calls, source budget and per-provider rate limiters — no infinite loops.
+- **Code-side citation injection**: the model returns evidence indexes and the agent renders `[n]`; citation coverage is audited before a report is marked verified.
 - Robust cascade deletion using MongoDB transactions where available with standalone fallback.
 - Centralized error handling (`ApiError`, Mongoose validation, CastErrors, duplicate key errors).
 - Zod request validation rejecting invalid types and bad MongoDB ObjectIds with HTTP 400.
@@ -102,9 +133,12 @@ npm install
 
 # Configure environment variables
 cp .env.example .env
-# Set MONGO_URI in .env
+# Required: MONGO_URI
+# Optional but recommended: GEMINI_API_KEY (free tier) and TAVILY_API_KEY.
+# Without keys the agent still runs end-to-end on DuckDuckGo/Wikipedia and the
+# deterministic mock brain — it just produces a less rich report.
 
-# Run automated tests (9 tests)
+# Run automated tests (45 agent tests, fully offline)
 npm test
 
 # Run development server with Nodemon (http://localhost:5000)
@@ -118,15 +152,25 @@ npm start
 
 | Variable | Required | Description |
 |---|---|---|
-| `PORT` | No | Server port (default `5000`) |
+| `PORT` | No | Server port (default `5000` — **must match** `frontend/src/services/api.js`) |
 | `NODE_ENV` | No | `development` / `production` / `test` |
-| `MONGO_URI` | **Yes** | MongoDB connection string (e.g. MongoDB Atlas) |
-| `GEMINI_API_KEY` | No* | Google Gemini API key (placeholder for future AI agent) |
-| `OPENAI_API_KEY` | No* | OpenAI API key (placeholder for future AI agent) |
+| `MONGO_URI` | **Yes** | MongoDB connection string (e.g. MongoDB Atlas). Server hard-exits without it. |
+| `LLM_PROVIDER` | No | `auto` (default) \| `gemini` \| `openai` \| `mock` |
+| `GEMINI_API_KEY` | No | Google Gemini key — primary LLM ([aistudio.google.com/apikey](https://aistudio.google.com/apikey), free tier) |
+| `GEMINI_MODEL` | No | Default `gemini-3-flash-preview`. **`gemini-2.0-flash` and `gemini-2.5-flash` are retired (404).** |
+| `OPENAI_API_KEY` | No | Fallback LLM. Model `gpt-4o-mini`. |
+| `TAVILY_API_KEY` | No | Primary search ([app.tavily.com](https://app.tavily.com/), free tier). Without it the agent uses keyless DuckDuckGo → Wikipedia. |
+| `AGENT_ENABLED` | No | `true` (default) starts the agent on session create; `false` creates idle sessions |
+| `AGENT_LLM_MIN_INTERVAL_MS` | No | LLM pacing (default `400`). Raise to `~13000` to stay inside Gemini's free-tier limit. |
+| `AGENT_DDG_MIN_INTERVAL_MS` | No | DuckDuckGo pacing (default `1500`) — it throttles hard below this |
+| `AGENT_MAX_ITERATIONS` | No | Hard loop bound (default `3`) |
+| `AGENT_MAX_TASKS` | No | Hard subtask bound (default `8`) |
+| `AGENT_MAX_LLM_CALLS` | No | Hard LLM-call budget (default `40`) |
+| `AGENT_DEFAULT_MAX_SOURCES` | No | Source budget per run (default `12`) |
 | `FRONTEND_URL` | No | Allowed CORS origin (default `*`) |
-| `JWT_SECRET` | No* | JWT secret (placeholder for future auth) |
+| `JWT_SECRET` | No | Reserved for future auth |
 
-*\*Not required during current prototype phase.*
+See `backend/.env.example` for the full annotated list.
 
 ---
 
@@ -150,7 +194,64 @@ npm start
 
 ---
 
-## 4. Current Status & Disclaimers
+## 4. The `research/` Package (standalone reference implementation)
 
-- **Frontend Simulation**: Operates standalone with realistic mock data and timed lifecycle simulation (`queued` → `planning` → `researching` → `evaluating` → `generating_report` → `completed`).
-- **AI Agent Integration**: All endpoints and service hooks are ready for AI agent integration. No live LLM inference, autonomous web scraping, or vector search pipelines are active yet.
+The repo-root `research/` directory is a **self-contained Python package** (Role 2:
+Research & Evidence). It provides `search_web`, `EvidenceStore` and
+`verify_citations`, and ships with **95 passing pytest tests**.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt     # tavily-python, python-dotenv, pytest, pytest-mock
+python -m pytest research/tests/ -q # 95 passed
+python research/demo.py             # runnable end-to-end demonstration
+```
+
+**It is deliberately not wired into the backend, and that is a design decision,
+not an oversight:**
+
+1. **It would import a second runtime into a working system.** Consuming it from
+   the Node backend means a Python subprocess, a second dependency tree and a new
+   class of failure (missing venv, wrong interpreter). The agent currently starts
+   with `npm start` alone — a robustness property that matters more than code reuse.
+2. **The Node agent already implements this layer, with stronger signals.** Search,
+   evidence collection and citation verification all live in `backend/src/agent/`,
+   driven by real LLM extraction and audit passes.
+3. **Its own docs mark it as approximate.** `verification.py` states plainly that
+   `find_conflicting_claims` "uses keyword overlap… It cannot determine whether"
+   two claims genuinely conflict. It is an honest heuristic — useful as an
+   independent cross-check, not as a replacement for the agent's fact-level
+   contradiction detection.
+4. **Its value is independence.** Two implementations of search/evidence/citation
+   logic in two languages, both under test, corroborate each other. For a project
+   judged on hallucination auditing, that is a stronger claim than a single
+   code path — the same reason the agent corroborates web sources against Wikipedia.
+
+If the team later wants the Python conflict heuristic as an *optional cross-check*,
+it should be invoked off the critical path and skipped gracefully when Python or
+its deps are unavailable.
+
+---
+
+## 5. Current Status & Disclaimers
+
+- **Agent brain: implemented and verified.** The backend runs the full autonomous
+  loop against live providers (Gemini + Tavily) and produces citation-audited
+  Markdown reports. `npm test` covers it with 45 offline tests.
+- **Frontend: live-wired with mock fallback.** `frontend/src/services/api.js` calls
+  the real API, polls `GET /research/:id/activity` every 1.5s, and renders live
+  tasks/evidence/tool calls/report. If `GET /health` fails it falls back to the
+  local mock simulation, so the UI still demos without a backend. **Note:** the
+  backend defaults to port `5000` to match this client — if you change one, change
+  both, or the fallback will trigger silently and you will be looking at mock data.
+- **Free-tier quota is the practical ceiling.** Gemini's free tier allows roughly
+  5 requests/minute while a full run makes ~15–20 calls, so a default-tempo run
+  hits HTTP 429 partway through and the remaining calls degrade to the
+  deterministic mock. Raise `AGENT_LLM_MIN_INTERVAL_MS` (~13000) for a fully
+  LLM-authored report. `gemini-2.0-flash` and `gemini-2.5-flash` are **retired**;
+  `gemini-3-flash-preview` is the verified working default.
+- **Python `research/` package: standalone.** 95 tests passing; intentionally not
+  on any runtime path (see §4).
+- **No vector search / embeddings pipeline** is in place — retrieval is live web
+  search plus Wikipedia corroboration.
