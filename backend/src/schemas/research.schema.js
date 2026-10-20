@@ -32,6 +32,12 @@ const researchIdParam = z.object({
   }),
 });
 
+const researchRunSchema = z.object({
+  params: z.object({
+    id: objectId,
+  }),
+});
+
 const researchIdParamAlt = z.object({
   params: z.object({
     researchId: objectId,
@@ -54,6 +60,10 @@ const createTaskSchema = z.object({
       .number({ required_error: 'order is required' })
       .int('order must be an integer')
       .min(0, 'order must be non-negative'),
+    searchQueries: z.array(z.string().trim().min(1)).optional(),
+    origin: z.enum(['initial', 'followup', 'manual']).optional(),
+    parentTaskId: objectId.optional(),
+    spawnedAtIteration: z.number().int().min(0).optional(),
   }),
 });
 
@@ -137,6 +147,28 @@ const upsertReportSchema = z.object({
       )
       .optional(),
     verificationStatus: z.enum(['pending', 'verified', 'needs_review']).optional(),
+    // Agent synthesis output (additive — manual upserts may omit all of these)
+    title: z.string().optional(),
+    markdown: z.string().optional(),
+    references: z
+      .array(
+        z.object({
+          index: z.number().int().min(1),
+          evidenceId: objectId.optional(),
+          title: z.string().optional(),
+          url: z.string().optional(),
+          sourceType: z.string().optional(),
+          qualityScore: z.number().min(0).max(1).optional(),
+        })
+      )
+      .optional(),
+    comparisonTable: z
+      .object({
+        headers: z.array(z.string()),
+        rows: z.array(z.array(z.string())),
+      })
+      .optional(),
+    citationCoverage: z.number().min(0).max(1).optional(),
   }),
 });
 
@@ -145,6 +177,7 @@ module.exports = {
   createResearchSchema,
   researchIdParam,
   researchIdParamAlt,
+  researchRunSchema,
   createTaskSchema,
   createEvidenceSchema,
   createToolCallSchema,

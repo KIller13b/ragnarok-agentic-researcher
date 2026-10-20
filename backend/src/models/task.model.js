@@ -25,6 +25,21 @@ const taskSchema = new mongoose.Schema(
       min: [0, 'Order cannot be negative'],
     },
     resultSummary: { type: String },
+    // ── Agent decomposition metadata ──────────────────────────────────────
+    // Written by the agent planner. `origin: 'followup'` marks subtasks the
+    // agent spawned AUTONOMOUSLY after its reflection pass found a gap —
+    // the clearest possible evidence of agentic behaviour on the dashboard.
+    searchQueries: [{ type: String, trim: true }],
+    origin: {
+      type: String,
+      enum: ['initial', 'followup', 'manual'],
+      default: 'initial',
+    },
+    parentTaskId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Task',
+    },
+    spawnedAtIteration: { type: Number },
   },
   { timestamps: true }
 );

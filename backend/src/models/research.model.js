@@ -1,5 +1,35 @@
 const mongoose = require('mongoose');
 
+// ── Live agent observability streams ──────────────────────────────────────
+// `agentLog` is the agent's running "thoughts" feed (what the dashboard
+// streams); `reflectionLog` records each reflection pass, i.e. the gaps,
+// conflicts and follow-up subtasks the agent found. Both are capped with
+// $slice at write time so they can never grow unbounded.
+
+const agentLogEntrySchema = new mongoose.Schema(
+  {
+    level: { type: String, enum: ['info', 'warn', 'error'], default: 'info' },
+    phase: { type: String },
+    message: { type: String },
+    meta: { type: mongoose.Schema.Types.Mixed },
+    at: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const reflectionLogEntrySchema = new mongoose.Schema(
+  {
+    iteration: { type: Number },
+    gapsFound: { type: Number },
+    conflictsFound: { type: Number },
+    followupsSpawned: { type: Number },
+    confidence: { type: Number },
+    gapDetails: [{ type: String }],
+    at: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const researchSchema = new mongoose.Schema(
   {
     question: {
@@ -29,6 +59,9 @@ const researchSchema = new mongoose.Schema(
     errorMessage: { type: String },
     startedAt: { type: Date },
     completedAt: { type: Date },
+    // ── Agent observability ───────────────────────────────────────────────
+    agentLog: [agentLogEntrySchema],
+    reflectionLog: [reflectionLogEntrySchema],
   },
   { timestamps: true }
 );

@@ -69,9 +69,45 @@ const deleteResearch = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/v1/research/:id/run
+ */
+const runResearch = async (req, res, next) => {
+  try {
+    const result = await researchService.runResearch(req.params.id);
+    return res.status(202).json({
+      success: true,
+      message: 'Agent run queued',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/v1/research/:id/activity
+ * Lightweight live feed for the dashboard: agent thoughts + reflection passes.
+ * Poll this — it is far cheaper than re-fetching tasks/evidence/tool-calls.
+ */
+const getActivity = async (req, res, next) => {
+  try {
+    const activity = await researchService.findActivityById(req.params.id);
+    return res.json({
+      success: true,
+      message: 'Research activity fetched',
+      data: activity,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createResearch,
   listResearch,
   getResearch,
   deleteResearch,
+  runResearch,
+  getActivity,
 };

@@ -5,31 +5,59 @@ const Evidence = require('../models/evidence.model');
 const ToolCall = require('../models/tool-call.model');
 const Report = require('../models/report.model');
 const ApiError = require('../utils/ApiError');
+const agent = require('../agent/agent.service');
+const agentConfig = require('../agent/config');
 
 /**
  * Create a new research session.
- * The session starts in `queued` status — no AI work happens here.
+ * The session starts in `queued` and the agent pipeline takes it from there:
+ *   queued → planning → researching ⇄ evaluating → generating_report → completed
+ *
+ * The agent runs asynchronously (fire-and-forget) so this endpoint returns
+ * immediately and the frontend can poll the live status.
  */
 const createResearch = async ({ question, constraints }) => {
   const research = await Research.create({ question, constraints });
 
-  // ──────────────────────────────────────────────────────────
-  // TODO: Agent integration placeholder
-  //
-  // After the research document is persisted you would
-  // eventually kick off the autonomous agent pipeline here:
-  //
-  //   await agentService.startResearch(research._id);
-  //
-  // That service would transition the status through
-  //   queued → planning → researching → evaluating →
-  //   generating_report → completed | failed
-  //
-  // For now the record stays in "queued" until the agent
-  // service is implemented.
-  // ──────────────────────────────────────────────────────────
+  if (agentConfig.autoStart) {
+    // setImmediate: let the HTTP response flush before the agent starts
+    // issuing LLM / search calls on the event loop.
+    setImmediate(() => {
+      agent.startResearch(research._id).catch((err) => {
+        console.error(`[agent] failed to start for ${research._id}:`, err.message);
+      });
+    });
+  } else {
+    console.warn(`[agent] AGENT_ENABLED=false — session ${research._id} stays queued.`);
+  }
 
   return research;
+};
+
+/**
+ * Manually (re)start the agent for an existing session.
+ * Used by the dashboard's "Run agent" / retry controls.
+ */
+const runResearch = async (id) => {
+  const research = await Research.findById(id).lean();
+  if (!research) throw new ApiError(404, 'Research session not found');
+
+  if (agent.isRunning(id)) {
+    throw new ApiError(409, 'Agent is already running for this session');
+  }
+
+  // A completed session may only be re-run after clearing its derived data.
+  if (research.status === 'completed') {
+    throw new ApiError(409, 'Session already completed — delete and start a new research session');
+  }
+
+  setImmediate(() => {
+    agent.startResearch(id).catch((err) => {
+      console.error(`[agent] failed to start for ${id}:`, err.message);
+    });
+  });
+
+  return { queued: true };
 };
 
 /**
@@ -62,6 +90,17 @@ const listResearch = async ({ page = 1, limit = 10, status } = {}) => {
  */
 const findResearchById = async (id) => {
   const research = await Research.findById(id).lean();
+  if (!research) throw new ApiError(404, 'Research session not found');
+  return research;
+};
+
+/**
+ * Live activity feed for a session (status + agent log + reflection log).
+ */
+const findActivityById = async (id) => {
+  const research = await Research.findById(id)
+    .select('status errorMessage startedAt completedAt updatedAt agentLog reflectionLog')
+    .lean();
   if (!research) throw new ApiError(404, 'Research session not found');
   return research;
 };
@@ -109,7 +148,9 @@ const deleteResearch = async (id) => {
 
 module.exports = {
   createResearch,
+  runResearch,
   listResearch,
   findResearchById,
+  findActivityById,
   deleteResearch,
 };
