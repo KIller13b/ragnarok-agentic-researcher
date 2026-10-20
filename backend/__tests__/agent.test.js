@@ -62,8 +62,28 @@ describe('LLM client', () => {
   it('parses JSON wrapped in code fences and surrounding prose', () => {
     expect(llm.parseJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(llm.parseJson('Sure! Here you go: {"b":[1,2]} hope that helps')).toEqual({ b: [1, 2] });
-    expect(llm.parseJson('[{"x":1}]')).toEqual([{ x: 1 }]);
     expect(() => llm.parseJson('not json at all')).toThrow(/not valid JSON/);
+  });
+
+  it('unwraps a single-element array containing the requested object', () => {
+    // Regression: a failed live run. Models often return `[{...}]` when asked
+    // for `{...}`. The whole string parses first, so the object candidates were
+    // never tried, callers read `data.sources` on an ARRAY and got `undefined`,
+    // and every extracted source was discarded — ending in
+    // "No evidence was collected". Silent data loss, no exception thrown.
+    expect(llm.parseJson('[{"sources":[{"url":"https://x.com"}]}]')).toEqual({
+      sources: [{ url: 'https://x.com' }],
+    });
+    expect(llm.parseJson('[{"subtasks":[{"title":"a"}]}]')).toEqual({ subtasks: [{ title: 'a' }] });
+    // ...including when it is also fenced.
+    expect(llm.parseJson('```json\n[{"sections":[]}]\n```')).toEqual({ sections: [] });
+  });
+
+  it('still returns genuine top-level arrays untouched', () => {
+    // The planner accepts a bare array of subtasks, so multi-element arrays of
+    // any length must NOT be unwrapped.
+    expect(llm.parseJson('[{"title":"a"},{"title":"b"}]')).toEqual([{ title: 'a' }, { title: 'b' }]);
+    expect(llm.parseJson('[1,2,3]')).toEqual([1, 2, 3]);
   });
 
   it('enforces the global call budget', async () => {

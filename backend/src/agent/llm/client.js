@@ -60,7 +60,19 @@ const parseJson = (text) => {
 
   for (const candidate of candidates) {
     try {
-      return JSON.parse(candidate);
+      const parsed = JSON.parse(candidate);
+      // Models frequently wrap the requested object in a single-element array
+      // (e.g. `[{"sources":[...]}]` instead of `{"sources":[...]}`). The whole
+      // string parses first, so the object candidates are never tried — and
+      // every caller then reads `data.sources` / `data.sections` and silently
+      // gets `undefined`, discarding good data. Unwrap here, once, for all
+      // callers. Only unwrap a 1-element array whose sole member is an object;
+      // a genuine top-level array of objects is left alone (planner accepts
+      // both shapes).
+      if (Array.isArray(parsed) && parsed.length === 1 && parsed[0] && typeof parsed[0] === 'object' && !Array.isArray(parsed[0])) {
+        return parsed[0];
+      }
+      return parsed;
     } catch {
       // try the next candidate
     }
